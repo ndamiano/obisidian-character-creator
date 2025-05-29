@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
+	"id": "d&d-character-creator",
+	"name": "Character Creator",
+	"version": "0.0.1",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Using templates and AI you can easily create characters with the entire context of your world.",
+	"author": "Nick Damiano",
+	"authorUrl": "my_github",
+	"fundingUrl": "my_kofi",
 	"isDesktopOnly": false
 }
