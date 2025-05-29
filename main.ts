@@ -1,29 +1,13 @@
-import {
-	App,
-	Menu,
-	Notice,
-	Plugin,
-	PluginSettingTab,
-	Setting,
-	TAbstractFile,
-	TFolder,
-} from "obsidian";
+import { Menu, Notice, Plugin, TAbstractFile, TFile, TFolder } from "obsidian";
 
-import { CharacterSchema } from "CharacterSchema";
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
-
-// Remember to rename these classes and interfaces!
-
-interface CharacterCreatorSettings {
-	api_key: string;
-	template: string;
-}
-
-const DEFAULT_SETTINGS: CharacterCreatorSettings = {
-	api_key: "",
-	template: "# {{Name}}\n\n**Description**: {{Description}}",
-};
+import { CharacterSchema } from "src/CharacterSchema";
+import {
+	CharacterCreatorSettings,
+	DEFAULT_SETTINGS,
+	SettingsTab,
+} from "src/SettingsTab";
 
 export default class CharacterCreatorPlugin extends Plugin {
 	settings: CharacterCreatorSettings;
@@ -100,13 +84,16 @@ export default class CharacterCreatorPlugin extends Plugin {
 		"Description": "A cunning herbalist who trades in secrets as often as roots."
 		}
 
-		Generate one character now:
+		The following is the context you might want to use.
+
+
 		`;
+
+		const context = await this.buildContextBlob();
 
 		const response = await this.client.responses.parse({
 			model: "gpt-4o",
-			instructions:
-				"You are an AI that generates fantasy characters for roleplaying games.",
+			instructions: prompt + context,
 			input: "Generate a character.",
 			text: {
 				format: zodTextFormat(CharacterSchema, "character"),
@@ -115,43 +102,46 @@ export default class CharacterCreatorPlugin extends Plugin {
 		console.log(response);
 		return response.output_parsed;
 	}
+
+	async buildContextBlob(): Promise<string> {
+		let result = "";
+
+		for (const folderPath of this.settings.contextFolders) {
+			const folder = this.app.vault.getAbstractFileByPath(folderPath);
+			if (!(folder instanceof TFolder)) continue;
+
+			const mdFiles = getAllMarkdownFilesInFolder(folder);
+
+			for (const file of mdFiles) {
+				const content = await this.app.vault.read(file);
+				result += `\n---\n# ${file.path}\n${content.trim()}\n`;
+			}
+		}
+
+		// Optionally truncate to avoid token overflow (~12k tokens ≈ 50k characters)
+		const maxLength = 10000;
+		if (result.length > maxLength) {
+			result = result.slice(-maxLength); // take the last part (most recent files)
+			result = "...\n[Truncated]\n" + result;
+		}
+
+		return result;
+	}
 }
 
-class SettingsTab extends PluginSettingTab {
-	plugin: CharacterCreatorPlugin;
+function getAllMarkdownFilesInFolder(folder: TFolder): TFile[] {
+	const files: TFile[] = [];
 
-	constructor(app: App, plugin: CharacterCreatorPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
+	const walk = (current: TFolder) => {
+		for (const item of current.children) {
+			if (item instanceof TFolder) {
+				walk(item); // recurse into subfolders
+			} else if (item instanceof TFile && item.extension === "md") {
+				files.push(item);
+			}
+		}
+	};
 
-	display(): void {
-		const { containerEl } = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName("Chat GPT API Key")
-			.setDesc("In order to get this go here: ")
-			.addText((text) =>
-				text
-					.setPlaceholder("This is your API key for chatGPT")
-					.setValue(this.plugin.settings.api_key)
-					.onChange(async (value) => {
-						this.plugin.settings.api_key = value;
-						await this.plugin.saveSettings();
-					})
-			);
-		new Setting(containerEl)
-			.setName("Character Template")
-			.setDesc("Use {{Name}} and {{Description}} in your template.")
-			.addTextArea((text) =>
-				text
-					.setValue(this.plugin.settings.template)
-					.onChange(async (value) => {
-						this.plugin.settings.template = value;
-						await this.plugin.saveSettings();
-					})
-			);
-	}
+	walk(folder);
+	return files;
 }
